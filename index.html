@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elektron Orbital Isı Haritası</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        #container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 1400px;
+        }
+        #canvas-container {
+            background: rgba(20, 20, 40, 0.9);
+            padding: 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        canvas {
+            display: block;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        }
+        #controls {
+            background: rgba(20, 20, 40, 0.9);
+            padding: 20px;
+            border-radius: 12px;
+            color: white;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            max-width: 320px;
+            height: fit-content;
+        }
+        h2 {
+            margin: 0 0 15px 0;
+            font-size: 20px;
+            color: #6eb5ff;
+        }
+        label {
+            display: block;
+            margin: 12px 0 5px 0;
+            font-size: 14px;
+            color: #b0b0d0;
+        }
+        select, input[type="range"] {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #3a3a5a;
+            background: #1a1a2e;
+            color: white;
+            font-size: 14px;
+        }
+        input[type="range"] {
+            padding: 0;
+            height: 6px;
+            cursor: pointer;
+        }
+        .info {
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(110, 181, 255, 0.1);
+            border-radius: 6px;
+            font-size: 13px;
+            border-left: 3px solid #6eb5ff;
+        }
+        .value-display {
+            display: inline-block;
+            float: right;
+            color: #6eb5ff;
+            font-weight: bold;
+        }
+        .plane-selector {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .plane-btn {
+            flex: 1;
+            padding: 8px;
+            border: 2px solid #3a3a5a;
+            background: #1a1a2e;
+            color: #b0b0d0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .plane-btn.active {
+            background: #6eb5ff;
+            color: #0a0a1a;
+            border-color: #6eb5ff;
+        }
+        #colorbar {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+        }
+        #colorbar-canvas {
+            width: 100%;
+            height: 30px;
+            border-radius: 4px;
+        }
+        .colorbar-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-size: 11px;
+            color: #b0b0d0;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container">
+            <canvas id="canvas" width="600" height="600"></canvas>
+        </div>
+        <div id="controls">
+            <h2>Orbital Isı Haritası</h2>
+            
+            <label>
+                Orbital Tipi
+                <select id="orbital">
+                    <option value="1s">1s</option>
+                    <option value="2s">2s</option>
+                    <option value="2p">2p</option>
+                    <option value="3s">3s</option>
+                    <option value="3p">3p</option>
+                    <option value="3d" selected>3d</option>
+                    <option value="4s">4s</option>
+                    <option value="4p">4p</option>
+                    <option value="4d">4d</option>
+                    <option value="4f">4f</option>
+                </select>
+            </label>
+
+            <label>Kesit Düzlemi</label>
+            <div class="plane-selector">
+                <button class="plane-btn active" data-plane="xy">XY</button>
+                <button class="plane-btn" data-plane="xz">XZ</button>
+                <button class="plane-btn" data-plane="yz">YZ</button>
+            </div>
+
+            <label>
+                m (manyetik kuantum)
+                <span class="value-display" id="m-value">0</span>
+                <input type="range" id="m-quantum" min="-3" max="3" value="0" step="1">
+            </label>
+
+            <label>
+                Ölçek (Bohr yarıçapı)
+                <span class="value-display" id="scale-value">8</span>
+                <input type="range" id="scale" min="4" max="16" value="8" step="1">
+            </label>
+
+            <div class="info" id="info">
+                <strong>3d orbital</strong><br>
+                n=3, l=2, m=0<br>
+                Düzlem: XY (z=0)
+            </div>
+
+            <div id="colorbar">
+                <canvas id="colorbar-canvas"></canvas>
+                <div class="colorbar-labels">
+                    <span>Düşük</span>
+                    <span>Olasılık Yoğunluğu</span>
+                    <span>Yüksek</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let canvas, ctx;
+        let colorbarCanvas, colorbarCtx;
+        let orbital = '3d';
+        let mQuantum = 0;
+        let resolution = 600;
+        let scale = 8;
+        let plane = 'xy';
+
+        const orbitalMap = {
+            '1s': {n: 1, l: 0}, '2s': {n: 2, l: 0}, '2p': {n: 2, l: 1},
+            '3s': {n: 3, l: 0}, '3p': {n: 3, l: 1}, '3d': {n: 3, l: 2},
+            '4s': {n: 4, l: 0}, '4p': {n: 4, l: 1}, '4d': {n: 4, l: 2}, '4f': {n: 4, l: 3}
+        };
+
+        function init() {
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            
+            colorbarCanvas = document.getElementById('colorbar-canvas');
+            colorbarCanvas.width = 280;
+            colorbarCanvas.height = 30;
+            colorbarCtx = colorbarCanvas.getContext('2d');
+            
+            drawColorbar();
+            drawOrbital();
+
+            document.getElementById('orbital').addEventListener('change', (e) => {
+                orbital = e.target.value;
+                const maxM = orbitalMap[orbital].l;
+                const mSlider = document.getElementById('m-quantum');
+                mSlider.max = maxM;
+                mSlider.min = -maxM;
+                mQuantum = Math.max(-maxM, Math.min(maxM, mQuantum));
+                mSlider.value = mQuantum;
+                document.getElementById('m-value').textContent = mQuantum;
+                updateInfo();
+                drawOrbital();
+            });
+
+            document.getElementById('m-quantum').addEventListener('input', (e) => {
+                mQuantum = parseInt(e.target.value);
+                document.getElementById('m-value').textContent = mQuantum;
+                updateInfo();
+                drawOrbital();
+            });
+
+            document.getElementById('scale').addEventListener('input', (e) => {
+                scale = parseInt(e.target.value);
+                document.getElementById('scale-value').textContent = scale;
+                updateInfo();
+                drawOrbital();
+            });
+
+            document.querySelectorAll('.plane-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.plane-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    plane = e.target.dataset.plane;
+                    updateInfo();
+                    drawOrbital();
+                });
+            });
+        }
+
+        function factorial(n) {
+            if (n <= 1) return 1;
+            let result = 1;
+            for (let i = 2; i <= n; i++) result *= i;
+            return result;
+        }
+
+        function associatedLaguerre(n, k, x) {
+            let sum = 0;
+            for (let i = 0; i <= n; i++) {
+                sum += Math.pow(-1, i) * factorial(n + k) * Math.pow(x, i) / 
+                       (factorial(n - i) * factorial(k + i) * factorial(i));
+            }
+            return sum;
+        }
+
+        function associatedLegendre(l, m, x) {
+            const absM = Math.abs(m);
+            if (absM > l) return 0;
+            
+            let pmm = 1.0;
+            if (absM > 0) {
+                const somx2 = Math.sqrt((1 - x) * (1 + x));
+                let fact = 1.0;
+                for (let i = 1; i <= absM; i++) {
+                    pmm *= -fact * somx2;
+                    fact += 2.0;
+                }
+            }
+            
+            if (l === absM) return pmm;
+            
+            let pmmp1 = x * (2 * absM + 1) * pmm;
+            if (l === absM + 1) return pmmp1;
+            
+            let pll = 0;
+            for (let ll = absM + 2; ll <= l; ll++) {
+                pll = (x * (2 * ll - 1) * pmmp1 - (ll + absM - 1) * pmm) / (ll - absM);
+                pmm = pmmp1;
+                pmmp1 = pll;
+            }
+            return pll;
+        }
+
+        function radialWavefunction(n, l, r) {
+            const a0 = 1;
+            const rho = 2 * r / (n * a0);
+            const norm = Math.sqrt(Math.pow(2 / (n * a0), 3) * factorial(n - l - 1) / 
+                        (2 * n * factorial(n + l)));
+            return norm * Math.exp(-rho / 2) * Math.pow(rho, l) * 
+                   associatedLaguerre(n - l - 1, 2 * l + 1, rho);
+        }
+
+        function sphericalHarmonic(l, m, theta, phi) {
+            const absM = Math.abs(m);
+            const norm = Math.sqrt((2 * l + 1) * factorial(l - absM) / 
+                        (4 * Math.PI * factorial(l + absM)));
+            const legendre = associatedLegendre(l, absM, Math.cos(theta));
+            
+            if (m >= 0) {
+                return norm * legendre * Math.cos(m * phi);
+            } else {
+                return norm * legendre * Math.sin(absM * phi);
+            }
+        }
+
+        function wavefunction(n, l, m, r, theta, phi) {
+            return radialWavefunction(n, l, r) * sphericalHarmonic(l, m, theta, phi);
+        }
+
+        function getCoordinates(i, j) {
+            const step = (2 * scale) / resolution;
+            const x = -scale + i * step;
+            const y = -scale + j * step;
+            
+            let r, theta, phi;
+            
+            if (plane === 'xy') {
+                const z = 0;
+                r = Math.sqrt(x*x + y*y + z*z);
+                theta = r > 0 ? Math.acos(z / r) : 0;
+                phi = Math.atan2(y, x);
+            } else if (plane === 'xz') {
+                const z = y;
+                const y2 = 0;
+                r = Math.sqrt(x*x + y2*y2 + z*z);
+                theta = r > 0 ? Math.acos(z / r) : 0;
+                phi = Math.atan2(y2, x);
+            } else {
+                const z = y;
+                const y2 = x;
+                const x2 = 0;
+                r = Math.sqrt(x2*x2 + y2*y2 + z*z);
+                theta = r > 0 ? Math.acos(z / r) : 0;
+                phi = Math.atan2(y2, x2);
+            }
+            
+            return {r, theta, phi};
+        }
+
+        function drawOrbital() {
+            const {n, l} = orbitalMap[orbital];
+            const imageData = ctx.createImageData(resolution, resolution);
+            
+            let maxProb = 0;
+            const probs = [];
+            
+            for (let j = 0; j < resolution; j++) {
+                probs[j] = [];
+                for (let i = 0; i < resolution; i++) {
+                    const {r, theta, phi} = getCoordinates(i, j);
+                    const psi = wavefunction(n, l, mQuantum, r, theta, phi);
+                    const prob = psi * psi;
+                    probs[j][i] = prob;
+                    maxProb = Math.max(maxProb, prob);
+                }
+            }
+            
+            for (let j = 0; j < resolution; j++) {
+                for (let i = 0; i < resolution; i++) {
+                    const prob = probs[j][i];
+                    const normalized = prob / maxProb;
+                    
+                    const color = getHeatmapColor(normalized);
+                    const idx = (j * resolution + i) * 4;
+                    imageData.data[idx] = color.r;
+                    imageData.data[idx + 1] = color.g;
+                    imageData.data[idx + 2] = color.b;
+                    imageData.data[idx + 3] = 255;
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function getHeatmapColor(value) {
+            const colors = [
+                {pos: 0.0, r: 0, g: 0, b: 20},
+                {pos: 0.2, r: 0, g: 0, b: 128},
+                {pos: 0.4, r: 0, g: 128, b: 255},
+                {pos: 0.6, r: 0, g: 255, b: 255},
+                {pos: 0.8, r: 255, g: 255, b: 0},
+                {pos: 1.0, r: 255, g: 0, b: 0}
+            ];
+            
+            for (let i = 0; i < colors.length - 1; i++) {
+                if (value >= colors[i].pos && value <= colors[i + 1].pos) {
+                    const t = (value - colors[i].pos) / (colors[i + 1].pos - colors[i].pos);
+                    return {
+                        r: Math.round(colors[i].r + t * (colors[i + 1].r - colors[i].r)),
+                        g: Math.round(colors[i].g + t * (colors[i + 1].g - colors[i].g)),
+                        b: Math.round(colors[i].b + t * (colors[i + 1].b - colors[i].b))
+                    };
+                }
+            }
+            return colors[colors.length - 1];
+        }
+
+        function drawColorbar() {
+            const width = colorbarCanvas.width;
+            const height = colorbarCanvas.height;
+            
+            for (let i = 0; i < width; i++) {
+                const value = i / width;
+                const color = getHeatmapColor(value);
+                colorbarCtx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+                colorbarCtx.fillRect(i, 0, 1, height);
+            }
+        }
+
+        function updateInfo() {
+            const {n, l} = orbitalMap[orbital];
+            const planeNames = {
+                'xy': 'XY (z=0)',
+                'xz': 'XZ (y=0)',
+                'yz': 'YZ (x=0)'
+            };
+            document.getElementById('info').innerHTML = 
+                `<strong>${orbital} orbital</strong><br>n=${n}, l=${l}, m=${mQuantum}<br>Düzlem: ${planeNames[plane]}`;
+        }
+
+        init();
+        updateInfo();
+    </script>
+</body>
+</html>
